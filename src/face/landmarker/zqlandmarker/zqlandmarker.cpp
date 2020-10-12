@@ -35,6 +35,8 @@ int ZQLandmarker::Init(const char* model_path) {
     schedule_config.backendConfig = &backend_config;
     zq_sess_ = zq_interpreter_->createSession(schedule_config);
     input_tensor_ = zq_interpreter_->getSessionInput(zq_sess_, nullptr);
+    zq_interpreter_->resizeTensor(input_tensor_, {1, 3, inputSize_.height, inputSize_.width});
+	zq_interpreter_->resizeSession(zq_sess_); 
 
     MNN::CV::Matrix trans;
 	trans.setScale(1.0f, 1.0f);
@@ -42,7 +44,7 @@ int ZQLandmarker::Init(const char* model_path) {
 	img_config.filterType = MNN::CV::BICUBIC;
 	::memcpy(img_config.mean, meanVals_, sizeof(meanVals_));
 	::memcpy(img_config.normal, normVals_, sizeof(normVals_));
-	img_config.sourceFormat = MNN::CV::RGBA;
+	img_config.sourceFormat = MNN::CV::BGR;
 	img_config.destFormat = MNN::CV::RGB;
 	pretreat_ = std::shared_ptr<MNN::CV::ImageProcess>(MNN::CV::ImageProcess::create(img_config));
 	pretreat_->setMatrix(trans);
@@ -54,23 +56,23 @@ int ZQLandmarker::Init(const char* model_path) {
     return 0; 
 }
 
-int ZQLandmarker::ExtractKeypoints(const cv::Mat& img_face, std::vector<cv::Point2f>* keypoints) {
+int ZQLandmarker::ExtractKeypoints(const cv::Mat& img_src, const cv::Rect& face, std::vector<cv::Point2f>* keypoints) {
     std::cout << "start extract keypoints." << std::endl;
     keypoints->clear();
     if (!initialized_) {
         std::cout << "model uninitialized." << std::endl;
         return 10000;
     }
-    if (img_face.empty()) {
+    if (img_src.empty()) {
         std::cout << "input empty." << std::endl;
         return 10001;
     }
+    cv::Mat img_face = img_src(face).clone();
     int width = img_face.cols;
     int height = img_face.rows;
     cv::Mat img_resized;
     cv::resize(img_face, img_resized, inputSize_);
-    uint8_t* data_ptr = GetImage(img_resized);
-	pretreat_->convert(data_ptr, inputSize_.width, inputSize_.height, 0, input_tensor_);
+	pretreat_->convert(img_resized.data, inputSize_.width, inputSize_.height, 0, input_tensor_);
 
     // run session
     zq_interpreter_->runSession(zq_sess_);
@@ -82,8 +84,8 @@ int ZQLandmarker::ExtractKeypoints(const cv::Mat& img_face, std::vector<cv::Poin
     output_landmark->copyToHostTensor(&landmark_tensor);
 
     for (int i = 0; i < 106; ++i) {
-        cv::Point2f curr_pt(landmark_tensor.host<float>()[2 * i + 0] * width,
-                            landmark_tensor.host<float>()[2 * i + 1] * height);
+        cv::Point2f curr_pt(landmark_tensor.host<float>()[2 * i + 0] * width + face.x,
+                            landmark_tensor.host<float>()[2 * i + 1] * height + face.y);
         keypoints->push_back(curr_pt);
     }
 

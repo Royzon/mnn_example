@@ -2,6 +2,7 @@
 #define _FACE_PFLDLANDMARKER_H_
 
 #include <vector>
+#include <memory>
 
 #include "opencv2/core.hpp"
 #include "../landmarker.h"
@@ -17,7 +18,7 @@ public:
     PFLDLandmarker();
     ~PFLDLandmarker();
     int Init(const char* model_path);
-    int ExtractKeypoints(const cv::Mat& img_face, std::vector<cv::Point2f>* keypoints);
+    int ExtractKeypoints(const cv::Mat& img_src, const cv::Rect& face, std::vector<cv::Point2f>* keypoints);
 
 private:
     bool initialized_;
